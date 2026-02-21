@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "NBA Per 75 Possessions",
+  "version": "1.0.0",
+  "description": "Adds a \"Per 75 Poss\" option to the Per Mode dropdown on nba.com/stats/players pages.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://www.nba.com/*",
+    "https://stats.nba.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.nba.com/stats/players/*"],
+      "js": ["content/page-intercept.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www.nba.com/stats/players/*"],
+      "js": [
+        "shared/constants.js",
+        "content/stats-calculator.js",
+        "content/api-interceptor.js",
+        "content/dom-injector.js",
+        "content/main.js"
+      ],
+      "css": ["styles/per75.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

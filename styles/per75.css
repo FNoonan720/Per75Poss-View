@@ -1,0 +1,25 @@
+/* Per 75 Possessions Extension Styles */
+
+/* Visual distinction for the injected dropdown option */
+option.per75-option {
+  font-weight: 600;
+}
+
+/* Loading state: table fades */
+.per75-loading {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+/* Error notification */
+.per75-error {
+  color: #d32f2f;
+  background: #fdecea;
+  border: 1px solid #f5c6cb;
+  border-radius: 4px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-family: inherit;
+}
