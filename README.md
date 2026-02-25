@@ -6,13 +6,9 @@ Per 75 possessions is a popular analytics normalization that better approximates
 
 **Formula:** `Per75 = (Total / Possessions) * 75`
 
-## Screenshots
+## Demo
 
-### Before — Standard Per Game view
-![Per Game view](screenshots/before.png)
-
-### After — Per 75 Possessions view
-![Per 75 Poss view](screenshots/after.png)
+[demo.mp4](https://github.com/user-attachments/assets/3bf9e537-fcca-47e0-aff5-82537afb8161)
 
 ## Why Per 75?
 
