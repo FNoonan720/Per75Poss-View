@@ -7,6 +7,10 @@ Per75.dom = {
   _injected: false,
   _onPer75Click: null,
   _perModeSelect: null,
+  _cachedPer75Data: null,
+  _tableObserver: null,
+  _reapplyTimer: null,
+  _reapplyMaxTimer: null,
 
   init(onPer75Click) {
     this._onPer75Click = onPer75Click;
@@ -217,6 +221,128 @@ Per75.dom = {
     }
   },
 
+  /**
+   * Watch document.body for React re-renders (sorts, page changes) and
+   * re-apply per-75 values each time the table is rewritten.
+   *
+   * Watching the body is the only reliable approach when React can replace
+   * any ancestor of the table during a sort (including table.parentElement
+   * and its ancestors). To avoid ads causing the debounce timer to never
+   * fire, we use a max-wait debounce: fire after 50ms of quiet OR after
+   * 500ms regardless, whichever comes first.
+   */
+  startWatchingTable(per75Data) {
+    this.stopWatchingTable();
+    this._cachedPer75Data = per75Data;
+
+    this._tableObserver = new MutationObserver(() => {
+      clearTimeout(this._reapplyTimer);
+      this._reapplyTimer = setTimeout(() => {
+        clearTimeout(this._reapplyMaxTimer);
+        this._reapplyMaxTimer = null;
+        this._reapplyPer75();
+      }, 50);
+
+      if (!this._reapplyMaxTimer) {
+        this._reapplyMaxTimer = setTimeout(() => {
+          this._reapplyMaxTimer = null;
+          clearTimeout(this._reapplyTimer);
+          this._reapplyTimer = null;
+          this._reapplyPer75();
+        }, 500);
+      }
+    });
+
+    this._tableObserver.observe(document.body, { childList: true, subtree: true });
+  },
+
+  _reapplyPer75() {
+    if (!this._cachedPer75Data || !this._tableObserver) return;
+    // Disconnect before writing so our own DOM changes don't re-trigger.
+    this._tableObserver.disconnect();
+    this.updateTable(this._cachedPer75Data);
+    this.resortTable();
+    // Reconnect to document.body (reference never becomes stale).
+    this._tableObserver.observe(document.body, { childList: true, subtree: true });
+  },
+
+  /**
+   * Re-sort the visible rows by the active column's Per 75 values so the
+   * display order reflects Per 75, not Per Game.
+   *
+   * Relies on aria-sort="ascending"|"descending" on the active header cell,
+   * which is standard for accessible HTML tables (and used by NBA.com).
+   */
+  resortTable() {
+    const table = this._findStatsTable();
+    if (!table) return;
+
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return;
+
+    // Detect which column is sorted and in which direction.
+    // NBA.com uses sorted="A" (descending/highest-first) and sorted="D" (ascending/lowest-first).
+    // Standard aria-sort is also checked as a fallback.
+    const headerCells = Array.from(
+      table.querySelectorAll('thead tr:last-child th, thead tr:last-child td')
+    );
+    let sortColIdx = -1;
+    let sortDir = 'desc';
+
+    for (let i = 0; i < headerCells.length; i++) {
+      const sorted = headerCells[i].getAttribute('sorted');
+      const ariaSort = headerCells[i].getAttribute('aria-sort');
+      if (sorted === 'A') { sortColIdx = i; sortDir = 'desc'; break; }
+      if (sorted === 'D') { sortColIdx = i; sortDir = 'asc'; break; }
+      if (ariaSort === 'descending') { sortColIdx = i; sortDir = 'desc'; break; }
+      if (ariaSort === 'ascending') { sortColIdx = i; sortDir = 'asc'; break; }
+    }
+
+    if (sortColIdx === -1) return; // No sort indicator found — leave as-is.
+
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    if (rows.length < 2) return;
+
+    // Verify the sort column is numeric (skip player name, team, etc.).
+    const probeText = rows[0].querySelectorAll('td')[sortColIdx]?.textContent?.trim() ?? '';
+    if (probeText === '' || isNaN(parseFloat(probeText))) return;
+
+    const MISSING = sortDir === 'desc' ? -Infinity : Infinity;
+
+    rows.sort((a, b) => {
+      const aText = a.querySelectorAll('td')[sortColIdx]?.textContent?.trim() ?? '';
+      const bText = b.querySelectorAll('td')[sortColIdx]?.textContent?.trim() ?? '';
+      const aVal = (aText === '' || aText === '\u2014') ? MISSING : (parseFloat(aText) ?? MISSING);
+      const bVal = (bText === '' || bText === '\u2014') ? MISSING : (parseFloat(bText) ?? MISSING);
+      return sortDir === 'desc' ? bVal - aVal : aVal - bVal;
+    });
+
+    // Re-insert rows in sorted order via a DocumentFragment (single reflow).
+    const frag = document.createDocumentFragment();
+    rows.forEach(r => frag.appendChild(r));
+    tbody.appendChild(frag);
+
+    // Update the rank column (cells[0]) if it holds sequential integers.
+    if (/^\d+$/.test(rows[0].querySelectorAll('td')[0]?.textContent?.trim() ?? '')) {
+      rows.forEach((row, i) => {
+        const cell = row.querySelectorAll('td')[0];
+        if (cell) cell.textContent = String(i + 1);
+      });
+    }
+  },
+
+  stopWatchingTable() {
+    clearTimeout(this._reapplyTimer);
+    clearTimeout(this._reapplyMaxTimer);
+    this._reapplyTimer = null;
+    this._reapplyMaxTimer = null;
+    if (this._tableObserver) {
+      this._tableObserver.disconnect();
+      this._tableObserver = null;
+    }
+    this._cachedPer75Data = null;
+  },
+
   saveOriginalTable() {
     const table = this._findStatsTable();
     if (!table) return null;
@@ -260,9 +386,11 @@ Per75.dom = {
   },
 
   destroy() {
+    this.stopWatchingTable();
     if (this._observer) {
       this._observer.disconnect();
       this._observer = null;
     }
   },
+
 };

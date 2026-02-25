@@ -8,12 +8,14 @@ Per75.main = {
   originalTableHtml: null,
   cachedTotals: null,
   cachedAdvanced: null,
+  cachedPer75Data: null,
   _navObserver: null,
   _lastUrl: null,
   _debounceTimer: null,
 
   init() {
     this._lastUrl = window.location.href;
+    this._lastPathname = window.location.pathname;
 
     // Initialize the API interceptor
     Per75.interceptor.init();
@@ -33,10 +35,13 @@ Per75.main = {
    */
   _watchNavigation() {
     this._navObserver = new MutationObserver(() => {
-      if (window.location.href !== this._lastUrl) {
+      // Only treat it as navigation when the *pathname* changes.
+      // Query-param changes (sort order, filters) must not reset Per 75 state.
+      if (window.location.pathname !== this._lastPathname) {
         clearTimeout(this._debounceTimer);
         this._debounceTimer = setTimeout(() => {
           this._lastUrl = window.location.href;
+          this._lastPathname = window.location.pathname;
           this._onNavigate();
         }, 300);
       }
@@ -60,6 +65,8 @@ Per75.main = {
     this.originalTableHtml = null;
     this.cachedTotals = null;
     this.cachedAdvanced = null;
+    this.cachedPer75Data = null;
+    Per75.dom.stopWatchingTable();
     Per75.interceptor.currentParams = null;
     Per75.dom.reset();
   },
@@ -109,10 +116,13 @@ Per75.main = {
       const per75Data = Per75.calculator.calculatePer75(totalsResultSet, possMap);
 
       Per75.dom.updateTable(per75Data);
+      Per75.dom.resortTable();
+      Per75.dom.startWatchingTable(per75Data);
 
       this.isPer75Active = true;
       this.cachedTotals = totalsData;
       this.cachedAdvanced = advancedData;
+      this.cachedPer75Data = per75Data;
 
     } catch (err) {
       console.error('[Per75]', err);
@@ -132,6 +142,8 @@ Per75.main = {
     if (!this.isPer75Active) return;
 
     this.isPer75Active = false;
+    this.cachedPer75Data = null;
+    Per75.dom.stopWatchingTable();
 
     if (this.originalTableHtml) {
       Per75.dom.restoreOriginalTable(this.originalTableHtml);
